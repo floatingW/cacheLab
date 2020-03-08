@@ -9,7 +9,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceRoot}/${fileBasenameNoExtension}",
-      "args": ["-v", "-s", "1", "-E", "1", "-b", "1", "-t", "traces/yi2.trace"],
+      "args": ["-v", "-s", "5", "-E", "1", "-b", "5", "-t", "traces/long.trace"],
       "stopAtEntry": false,
       "cwd": "${workspaceRoot}",
       "environment": [],

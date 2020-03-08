@@ -17,12 +17,15 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdbool.h>
+
 #define LINE_LEN 256
+
 /* function cache return value */
 #define HITS 1
 #define MISSES 2
 #define EVICTIONS 3
 
+/* for LRU */
 static int cycle = 0;
 
 void printUsage();
@@ -116,9 +119,14 @@ int main(int argc, char *argv[]) {
     long set_index = 0;
     long tag = 0;
 
+int countcycle =0;
     int cache_hits = -1;
     line = malloc(LINE_LEN);
     while(fgets(line, LINE_LEN, file) != NULL) {
+        countcycle++;
+        printf("%d\n", countcycle);
+        int tmptmp;
+        if(countcycle == 44326) scanf("%d", &tmptmp);
         if(*line == 'I') continue;
         line++;
         str_size = strstr(line, ",");
@@ -161,8 +169,8 @@ int main(int argc, char *argv[]) {
     }
 
     /* output summary */ 
-    printSummary(hits, misses, evictions);
     fclose(file);
+    printSummary(hits, misses, evictions);
     return 0;
 }
 
