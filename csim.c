@@ -18,10 +18,19 @@
 #include <string.h>
 #include <stdbool.h>
 #define LINE_LEN 256
+/* function cache return value */
+#define HITS 1
+#define MISSES 2
+#define EVICTIONS 3
+
+static int cycle = 0;
 
 void printUsage();
+void printHits(int);
+void printInstruction(char, long, int);
+void countHits(int, int *, int *, int*);
+void get_idx_tag(long, long *, long *, int, int);
 
-void get_setidx_tag(long, long *, long *, int, int);
 typedef struct line {
     bool v;
     int last;
@@ -29,6 +38,7 @@ typedef struct line {
 } line_t;
 
 typedef struct set {
+    int lru;
     line_t *lines;
 } set_t;
 
@@ -39,7 +49,9 @@ typedef struct cache {
     set_t *sets;
 } cache_t;
 
+void myfree(cache_t *);
 cache_t *do_cache_initialization(int, int, int);
+int cache(cache_t *, long, long);
 int main(int argc, char *argv[]) {
 
     extern char *optarg;
@@ -52,9 +64,6 @@ int main(int argc, char *argv[]) {
     int b = -1;
     FILE *file;
     char opt;
-
-    /* supress error of unusing of verbose */
-    if(verbose);
 
     /* reading arg */
     while((opt = getopt(argc, argv, "hvs:E:b:t:")) != -1) {
@@ -83,7 +92,6 @@ int main(int argc, char *argv[]) {
     /* error check */
     if(error == 1 || s < 1 || e < 1 || b < 1 || file == NULL) {
         printUsage();
-        fclose(file);
         exit(1);
     }
 
@@ -96,14 +104,19 @@ int main(int argc, char *argv[]) {
 
     /* do cache processing */
     char *line, *str_addr, *str_size;
+
     char op;
     int size;
     unsigned long addr;
+
     int hits = 0;
     int misses = 0;
     int evictions = 0;
+
     long set_index = 0;
     long tag = 0;
+
+    int cache_hits = -1;
     line = malloc(LINE_LEN);
     while(fgets(line, LINE_LEN, file) != NULL) {
         if(*line == 'I') continue;
@@ -116,10 +129,35 @@ int main(int argc, char *argv[]) {
         line+=2;
         str_addr = strtok(line, ",");
         sscanf(str_addr, "%lx", &addr);
-        /* suppress error msg */
-        printf("%c %lx,%d\n", op, addr, size);
         /* cache handling */
-        get_setidx_tag(addr, &set_index, &tag, s, b);
+        get_idx_tag(addr, &set_index, &tag, s, b);
+        //printf("%ld, %ld\n", set_index, tag);
+        switch(op) {
+            case 'L':
+            case 'S':
+                cache_hits = cache(ca, set_index, tag);
+                countHits(cache_hits, &hits, &misses, &evictions);
+                if(verbose) {
+                    printInstruction(op, addr, size);
+                    printHits(cache_hits);
+                    printf("\n");
+                }
+                break;
+            case 'M':
+                cache_hits = cache(ca, set_index, tag);
+                if(verbose) {
+                    countHits(cache_hits, &hits, &misses, &evictions);
+                    printInstruction(op, addr, size);
+                    printHits(cache_hits);
+                }
+                cache_hits = cache(ca, set_index, tag);
+                if(verbose) {
+                    countHits(cache_hits, &hits, &misses, &evictions);
+                    printHits(cache_hits);
+                    printf("\n");
+                }
+                break;
+        }
     }
 
     /* output summary */ 
@@ -133,26 +171,111 @@ void printUsage() {
     printf("Usage: brbrbr\n");
 }
 
+void printInstruction(char op, long addr, int size) {
+    printf("%c %lx,%d", op, addr, size);
+}
+
+void printHits(int hits) {
+    if(hits == HITS) printf(" hit");
+    if(hits == MISSES) printf(" miss");
+    if(hits == EVICTIONS) printf(" miss eviction");
+}
+
+void countHits(int hit, int *hits, int *misses, int *evictions) {
+    if(hit == HITS) ++*hits;
+    if(hit == MISSES) ++*misses;
+    if(hit == EVICTIONS) {
+        ++*misses;
+        ++*evictions;
+    }
+}
+
+void myfree(cache_t * ca) {
+    set_t *sets;
+    line_t *lines;
+    if(ca) {
+        if(ca->sets) {
+            sets = ca->sets;
+            for(int i = 0; i < (2 << (ca->s - 1)); ++i) {
+                if((lines = (sets + i)->lines)) {
+                    free(lines);
+                }
+            }
+            free(sets);
+        }
+        free(ca);
+    }
+}
+
 cache_t *do_cache_initialization(int s, int e, int b) {
     cache_t *ca;
     ca = (cache_t*)malloc(sizeof(cache_t));
+    ca->s = s;
+    ca->e = e;
+    ca->b = b;
     if(ca == NULL) return NULL;
-    ca->sets = (set_t*)malloc((2 << (s - 1)) * sizeof(set_t));
+    ca->sets = (set_t*)calloc(2 << (s - 1), sizeof(set_t));
     if(ca->sets == NULL) {
-        free(ca); 
+        myfree(ca);
         return NULL;
     }
-    ca->sets->lines = (line_t*)calloc(e, sizeof(line_t));
-    if(ca->sets->lines == NULL) {
-        free(ca->sets);
-        free(ca);
-        return NULL;
+    set_t *sets = ca->sets;
+    for(int i = 0; i < (2<<(s-1)); ++i) {
+        sets->lines = (line_t*)calloc(e, sizeof(line_t));
+        if(ca->sets->lines == NULL) {
+            myfree(ca);
+            return NULL;
+        }
+        ++sets;
     }
     return ca;
 }
 
-void get_setidx_tag(long addr, long *set_index, long *tag, int s, int b) {
+void get_idx_tag(long addr, long *idx, long *tag, int s, int b) {
     long mask = 0x8000000000000000;
-    *set_index = (addr >> b) & (~(mask >> (64 - s)));
-    *tag = (addr >> (s + b)) & (~(mask >> (64 - s - b)));
+    *idx = (addr >> b) & (~(mask >> (63 - s)));
+    *tag = (addr >> (s + b)) & (~(mask >> (s + b - 1)));
+}
+
+int cache(cache_t *ca, long idx, long tag) {
+    set_t *set = ca->sets + idx;
+    line_t *line = set->lines;
+    int result;
+    bool found = false;
+    ++cycle;
+    for(int i = 0; i < ca->e; ++i) {
+        if(line->v) {
+            if(line->tag == tag) {
+                found = true;
+                result = HITS;
+                line->last = cycle;
+                break;
+            } else {
+                continue;
+            }
+        } else {
+            found = true;
+            line->tag = tag;
+            line->v = true;
+            result = MISSES;
+            line->last = cycle;
+        }
+    }
+    if(!found) {
+        line = set->lines + set->lru;
+        line->tag = tag;
+        result = EVICTIONS;
+        line->last = cycle;
+    }
+    /* maintain LRU value */
+    int min = 0x7FFFFFFF;
+    int tmp;
+    int lru;
+    for(int i = 0; i < ca->e; ++i) {
+        if((tmp = (line->last + i)) < min) {
+            lru = i;
+        }
+    }
+    set->lru = lru;
+    return result;
 }
