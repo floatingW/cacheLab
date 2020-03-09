@@ -18,7 +18,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#define LINE_LEN 256
+#define LINE_LEN 16 
 
 /* function cache return value */
 #define HITS 1
@@ -119,23 +119,20 @@ int main(int argc, char *argv[]) {
     long set_index = 0;
     long tag = 0;
 
-int countcycle =0;
     int cache_hits = -1;
-    line = malloc(LINE_LEN);
+    line = calloc(LINE_LEN, sizeof(char)); 
+    char *p;
     while(fgets(line, LINE_LEN, file) != NULL) {
-        countcycle++;
-        printf("%d\n", countcycle);
-        int tmptmp;
-        if(countcycle == 44326) scanf("%d", &tmptmp);
-        if(*line == 'I') continue;
-        line++;
-        str_size = strstr(line, ",");
+        p = line;
+        if(*p== 'I') continue;
+        p++;
+        str_size = strstr(p, ",");
         if(str_size) {
             size = atoi(++str_size);
         } else continue;
-        op = *line;
-        line+=2;
-        str_addr = strtok(line, ",");
+        op = *p;
+        p+=2;
+        str_addr = strtok(p, ",");
         sscanf(str_addr, "%lx", &addr);
         /* cache handling */
         get_idx_tag(addr, &set_index, &tag, s, b);
