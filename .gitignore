@@ -1,3 +1,6 @@
 csim
 fwei-handin.tar
-.csim_result
+.csim_results
+*.o
+tracegen
+test-trans

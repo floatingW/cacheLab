@@ -170,6 +170,8 @@ int main(int argc, char *argv[]) {
 
     /* output summary */ 
     fclose(file);
+    free(line);
+    myfree(ca);
     printSummary(hitssum, missessum, evictionsum);
     return 0;
 }
