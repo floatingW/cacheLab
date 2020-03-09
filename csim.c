@@ -28,6 +28,11 @@
 /* for LRU */
 static int cycle = 0;
 
+/* hits count num */
+static int hitssum;
+static int missessum;
+static int evictionsum;
+
 void printUsage();
 void printHits(int);
 void printInstruction(char, long, int);
@@ -44,6 +49,8 @@ typedef struct set {
     int lru;
     line_t *lines;
 } set_t;
+
+void set_lru(set_t *, int);
 
 typedef struct cache {
     int s;
@@ -112,10 +119,6 @@ int main(int argc, char *argv[]) {
     int size;
     unsigned long addr;
 
-    int hits = 0;
-    int misses = 0;
-    int evictions = 0;
-
     long set_index = 0;
     long tag = 0;
 
@@ -141,7 +144,7 @@ int main(int argc, char *argv[]) {
             case 'L':
             case 'S':
                 cache_hits = cache(ca, set_index, tag);
-                countHits(cache_hits, &hits, &misses, &evictions);
+                countHits(cache_hits, &hitssum, &missessum, &evictionsum);
                 if(verbose) {
                     printInstruction(op, addr, size);
                     printHits(cache_hits);
@@ -150,14 +153,14 @@ int main(int argc, char *argv[]) {
                 break;
             case 'M':
                 cache_hits = cache(ca, set_index, tag);
+                countHits(cache_hits, &hitssum, &missessum, &evictionsum);
                 if(verbose) {
-                    countHits(cache_hits, &hits, &misses, &evictions);
                     printInstruction(op, addr, size);
                     printHits(cache_hits);
                 }
                 cache_hits = cache(ca, set_index, tag);
+                countHits(cache_hits, &hitssum, &missessum, &evictionsum);
                 if(verbose) {
-                    countHits(cache_hits, &hits, &misses, &evictions);
                     printHits(cache_hits);
                     printf("\n");
                 }
@@ -167,7 +170,7 @@ int main(int argc, char *argv[]) {
 
     /* output summary */ 
     fclose(file);
-    printSummary(hits, misses, evictions);
+    printSummary(hitssum, missessum, evictionsum);
     return 0;
 }
 
@@ -244,11 +247,13 @@ void get_idx_tag(long addr, long *idx, long *tag, int s, int b) {
 
 int cache(cache_t *ca, long idx, long tag) {
     set_t *set = ca->sets + idx;
-    line_t *line = set->lines;
+    line_t *line;
+  //  printf("idx: %ld, tag: %ld\n", idx, tag);
     int result;
     bool found = false;
     ++cycle;
     for(int i = 0; i < ca->e; ++i) {
+        line = set->lines + i;
         if(line->v) {
             if(line->tag == tag) {
                 found = true;
@@ -264,6 +269,7 @@ int cache(cache_t *ca, long idx, long tag) {
             line->v = true;
             result = MISSES;
             line->last = cycle;
+            break;
         }
     }
     if(!found) {
@@ -273,14 +279,22 @@ int cache(cache_t *ca, long idx, long tag) {
         line->last = cycle;
     }
     /* maintain LRU value */
-    int min = 0x7FFFFFFF;
-    int tmp;
-    int lru;
-    for(int i = 0; i < ca->e; ++i) {
-        if((tmp = (line->last + i)) < min) {
+    if(ca->e > 1) {
+        set_lru(set, ca->e);
+    }
+    return result;
+}
+
+void set_lru(set_t *set, int e) {
+    int lru = 0;
+    int min = set->lines->last;
+    line_t *line;
+    for(int i = 0; i < e; ++i) {
+        line = set->lines + i;
+        if(line->last < min) {
+            min = line->last;
             lru = i;
         }
     }
     set->lru = lru;
-    return result;
 }
