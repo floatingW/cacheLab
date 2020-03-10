@@ -2,6 +2,7 @@
   "files.associations": {
     "cstdlib": "c",
     "unistd.h": "c",
-    "bitsperlong.h": "c"
+    "bitsperlong.h": "c",
+    "cachelab.h": "c"
   }
 }
